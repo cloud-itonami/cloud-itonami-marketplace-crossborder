@@ -50,11 +50,18 @@
   "phase -> {:label .. :writes <ops allowed to write> :auto <ops allowed
   to auto-commit when governor-clean>}."
   {0 {:label "read-only"        :writes #{}                 :auto #{}}
-   1 {:label "assisted-intake"  :writes #{:open-dispute}      :auto #{}}
-   2 {:label "assisted-quoting" :writes #{:open-dispute :quote-landed-cost
+   1 {:label "assisted-intake"  :writes #{:open-dispute :open-referred-dispute} :auto #{}}
+   2 {:label "assisted-quoting" :writes #{:open-dispute :open-referred-dispute
+                                          :quote-landed-cost
                                           :add-dispute-evidence} :auto #{}}
    3 {:label "supervised-auto"  :writes write-ops
-      :auto #{:quote-landed-cost :open-dispute :add-dispute-evidence}}})
+      ;; `:open-referred-dispute` is auto-eligible for the same reason
+      ;; `:open-dispute` is: recording that someone complained asserts
+      ;; nothing about who is right. The referral's no-verdict rule is
+      ;; enforced by the governor, not by making a human read every
+      ;; referral (ADR-2607264000).
+      :auto #{:quote-landed-cost :open-dispute :open-referred-dispute
+              :add-dispute-evidence}}})
 
 (def default-phase 3)
 

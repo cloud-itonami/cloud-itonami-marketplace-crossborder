@@ -55,7 +55,8 @@
       `:auto` set independently -- two layers, not one."
   (:require [borderops.store :as store]
             [clojure.string :as str]
-            [marketplace.crossborder :as cb]))
+            [marketplace.crossborder :as cb]
+            [marketplace.support :as support]))
 
 (def confidence-floor 0.6)
 
@@ -64,6 +65,12 @@
   declaration or decides a dispute is EVER a member -- such an op would
   be a permanent scope violation, not merely un-implemented."
   #{:propose-hs-classification :quote-landed-cost :open-dispute
+    ;; ADR-2607264000: the receiving half of the support bridge. A
+    ;; contact taken by `cloud-itonami-isic-8220` arrives here as a
+    ;; `marketplace.support` referral and becomes an ordinary dispute --
+    ;; with the referral's own no-verdict rule re-checked on THIS side,
+    ;; because a bridge is only as honest as its far end.
+    :open-referred-dispute
     :add-dispute-evidence :flag-crossborder-concern})
 
 (def always-escalate-ops
@@ -148,6 +155,27 @@
                                      (name (:crossborder.error/code e)))})
                 errs))))))
 
+(defn- referral-violations
+  "For `:open-referred-dispute` ONLY: the incoming referral must be
+  structurally sound and must NOT carry a verdict.
+
+  Re-checked here even though `cloud-itonami-isic-8220`'s governor
+  already checks it. The two actors are separately deployable and
+  separately forkable -- a marketplace operator may accept referrals
+  from a call centre they do not run -- so trusting the sender's
+  validation would make this side's guarantee only as strong as
+  whoever is on the other end of the wire."
+  [proposal]
+  (when (= :open-referred-dispute (:op proposal))
+    (let [r (get-in proposal [:value :referral])]
+      (if-not (map? r)
+        [{:rule :referral-missing :detail "照会レコードがない"}]
+        (when-let [errs (seq (support/referral-errors r))]
+          (mapv (fn [e] {:rule (:support.error/code e)
+                         :detail (or (:support.error/detail e)
+                                     (name (:support.error/code e)))})
+                errs))))))
+
 (defn- unknown-dispute-violations
   [proposal st]
   (when (= :add-dispute-evidence (:op proposal))
@@ -185,6 +213,7 @@
                    (concat (uncomputable-quote-violations proposal store)
                            (hs-proposal-violations proposal)
                            (dispute-violations proposal)
+                           (referral-violations proposal)
                            (unknown-dispute-violations proposal store)
                            (effect-not-propose-violations proposal)
                            (scope-exclusion-violations proposal)))

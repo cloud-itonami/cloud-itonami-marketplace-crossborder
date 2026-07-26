@@ -2,10 +2,10 @@
   "CrossBorderAdvisor -- the *contained intelligence node* for the
   marketplace cross-border actor.
 
-  It drafts exactly five kinds of proposal from a closed allowlist:
+  It drafts exactly six kinds of proposal from a closed allowlist:
   proposing an HS classification candidate, quoting a landed cost,
-  opening a dispute, adding evidence to one, and flagging a cross-border
-  concern.
+  opening a dispute, opening one from a support referral, adding
+  evidence to one, and flagging a cross-border concern.
 
   CRITICAL: every proposal's `:effect` is always `:propose`; every output
   is censored downstream by `borderops.governor`.
@@ -25,7 +25,8 @@
   actor graph runs offline. In production this calls a real LLM (or a
   customs broker's API) with the same proposal shape."
   (:require [borderops.store :as store]
-            [marketplace.crossborder :as cb]))
+            [marketplace.crossborder :as cb]
+            [marketplace.support :as support]))
 
 (defprotocol Advisor
   (-advise [advisor store request] "store + request -> proposal map"))
@@ -113,9 +114,31 @@
    :value   patch
    :confidence (or (:confidence patch) 0.8)})
 
+(defn- propose-referred-dispute
+  "Open a dispute from a support referral.
+
+  `marketplace.support/open-with-evidence` builds the dispute AND files
+  the support contact as the buyer's first evidence, so the call the
+  complaint came from is in the same append-only log as everything else
+  either side files. It returns nil for a verdict-carrying referral, and
+  the governor refuses one independently."
+  [_st {:keys [patch]}]
+  (let [r (:referral patch)
+        d (support/open-with-evidence r)]
+    {:op      :open-referred-dispute
+     :subject (:referral/id r)
+     :summary (str "応対 " (:referral/ticket r) " からの照会を紛争として受付: "
+                   (pr-str (:referral/reason r)))
+     :rationale "応対記録からの紛争受付のみ。申し立て内容の当否は判断しない。"
+     :cites   (vec (keep identity [(:referral/ticket r) (:referral/order r)]))
+     :effect  :propose
+     :value   {:referral r :dispute d}
+     :confidence 0.9}))
+
 (defn infer
   [st {:keys [op out-of-scope?] :as request}]
   (let [proposal (case op
+                   :open-referred-dispute     (propose-referred-dispute st request)
                    :propose-hs-classification (propose-hs st request)
                    :quote-landed-cost         (propose-quote st request)
                    :open-dispute              (propose-dispute st request)

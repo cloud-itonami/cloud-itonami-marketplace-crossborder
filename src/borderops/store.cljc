@@ -100,7 +100,7 @@
         (when-let [q (:quote value)]
           (swap! a assoc-in [:quotes (:quote-id value)] q))
 
-        :open-dispute
+        (:open-dispute :open-referred-dispute)
         (when-let [d (:dispute value)]
           (swap! a assoc-in [:disputes (:dispute/id d)] d))
 
