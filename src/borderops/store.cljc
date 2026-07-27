@@ -25,7 +25,8 @@
   the difference at the border. An operator supplies their own table.
 
   The ledger stays append-only."
-  (:require [marketplace.crossborder :as cb]))
+  (:require [marketplace.crossborder :as cb]
+            [marketplace.persist :as persist]))
 
 (defprotocol Store
   (rates [s] "The operator's rate table, indexed by [destination hs6].")
@@ -40,6 +41,7 @@
   (crossborder-log [s])
   (commit-record! [s record])
   (append-ledger! [s fact])
+  (durable? [s] "False for the test-only memory backend.")
   (with-rates [s rows]))
 
 ;; ----------------------------- demo data -----------------------------
@@ -80,6 +82,7 @@
   (all-disputes [_] (sort-by :dispute/id (vals (:disputes @a))))
   (ledger [_] (:ledger @a))
   (crossborder-log [_] (:crossborder-log @a))
+  (durable? [_] false)
   (commit-record! [_ record]
     (swap! a update :crossborder-log conj record)
     (let [{:keys [op value]} record]
@@ -131,3 +134,84 @@
   `marketplace.crossborder/landed-cost`."
   [s shipment]
   (cb/landed-cost shipment (rates s)))
+
+;; ----------------------------- durable store -----------------------------
+
+(defn- rate-id [dest hs6] (str dest "/" hs6))
+
+(defrecord KotobaseStore [st seed]
+  Store
+  ;; No tariff table ships with this actor and none is invented here.
+  ;; An empty rate table means `:landed/computable? false`, which is the
+  ;; honest answer -- a guessed duty rate quoted to a buyer is worse
+  ;; than no quote.
+  (rates [_]
+    (into {} (map (fn [r] [[(:rate/destination r) (:rate/hs6 r)] (:rate/row r)])
+                  (persist/all-docs (persist/ctx st :rate :rate/id)))))
+  (rate-row [_ dest hs6]
+    (:rate/row (persist/get-doc (persist/ctx st :rate :rate/id) (rate-id dest hs6))))
+  (classification [_ pid] (persist/get-doc (persist/ctx st :classification :product/id) pid))
+  (all-classifications [_]
+    (into {} (map (juxt :product/id identity)
+                  (persist/all-docs (persist/ctx st :classification :product/id)))))
+  (quote-record [_ qid] (:quote/value (persist/get-doc (persist/ctx st :quote :quote/id) qid)))
+  (all-quotes [_]
+    (->> (persist/all-docs (persist/ctx st :quote :quote/id))
+         (map (juxt :quote/id :quote/value))
+         (sort-by first)))
+  (dispute [_ did] (persist/get-doc (persist/ctx st :dispute :dispute/id) did))
+  (all-disputes [_] (persist/all-docs (persist/ctx st :dispute :dispute/id)))
+  (durable? [_] (not (:persist/memory? st)))
+  (ledger [_] (persist/read-events (persist/stream-ctx st :ledger)))
+  (crossborder-log [_] (persist/read-events (persist/stream-ctx st :crossborder-log)))
+  (commit-record! [this record]
+    (persist/append-event! (persist/stream-ctx st :crossborder-log) seed record)
+    (let [{:keys [op value]} record
+          dctx (persist/ctx st :dispute :dispute/id)]
+      (case op
+        ;; Only an APPROVED classification lands. The actor's proposal is
+        ;; a candidate until a human accepts it, which is why
+        ;; :propose-hs-classification always escalates.
+        :propose-hs-classification
+        (when-let [p (:proposal value)]
+          (persist/put-doc! (persist/ctx st :classification :product/id)
+                            {:product/id (:proposal/product p)
+                             :classification/product (:proposal/product p)
+                             :classification/hs6 (:proposal/hs6 p)
+                             :classification/basis (:proposal/basis p)
+                             :classification/accepted-by (:approved-by record)
+                             :classification/accepted? true}))
+
+        :quote-landed-cost
+        (when-let [q (:quote value)]
+          (persist/put-doc! (persist/ctx st :quote :quote/id)
+                            {:quote/id (:quote-id value) :quote/value q}))
+
+        (:open-dispute :open-referred-dispute)
+        (when-let [d (:dispute value)] (persist/put-doc! dctx d))
+
+        :add-dispute-evidence
+        (when-let [d (dispute this (:dispute-id value))]
+          (persist/put-doc! dctx (cb/add-evidence d (:evidence value))))
+
+        nil))
+    record)
+  (append-ledger! [_ fact]
+    (persist/append-event! (persist/stream-ctx st :ledger) seed fact))
+  (with-rates [this rows]
+    (doseq [r rows]
+      (let [row (cb/duty-rate r)]
+        (persist/put-doc! (persist/ctx st :rate :rate/id)
+                          {:rate/id (rate-id (:rate/destination row) (:rate/hs6 row))
+                           :rate/destination (:rate/destination row)
+                           :rate/hs6 (:rate/hs6 row)
+                           :rate/row row})))
+    this))
+
+(defn kotobase-store
+  "A durable store over a HOST-INJECTED database API. Throws when the
+  host has not wired one, per
+  `:policy/fail-closed-without-host-injection`."
+  [{:keys [db-api seq-fn]}]
+  (->KotobaseStore (persist/store {:db-api db-api :actor "borderops"})
+                   (or seq-fn (let [n (atom 0)] #(swap! n inc)))))
