@@ -14,4 +14,12 @@
  ;; Preserves the fleet-wide invariant ISIC 4791 established: no actor
  ;; adjudicates. Disputes are intake only; classification is a candidate
  ;; until a human accepts it.
- :itonami.blueprint/adjudicating false}
+ :itonami.blueprint/adjudicating false
+ ;; Address added 2026-07-30. The Worker is deployed and /health answers 200.
+ ;; It is a *.workers.dev URL because this Worker declares neither a route nor
+ ;; a custom_domain, and no marketplace./api. host under itonami.cloud resolves
+ ;; — so this is the only real address, recorded as such rather than as a
+ ;; preferred one. :endpoint-kind is what a consumer should key off if it wants
+ ;; to treat a provisional address differently.
+ :itonami.blueprint/endpoint "https://cloud-itonami-marketplace-crossborder.04-feasts-minded.workers.dev"
+ :itonami.blueprint/endpoint-kind :workers-dev}
