@@ -54,7 +54,7 @@
       ALWAYS escalate. `borderops.phase` keeps both out of every phase's
       `:auto` set independently -- two layers, not one."
   (:require [borderops.store :as store]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [marketplace.crossborder :as cb]
             [marketplace.support :as support]))
 
@@ -190,7 +190,7 @@
       :detail (str ":effect は :propose のみ許可されるが " (pr-str (:effect proposal)) " が提案された")}]))
 
 (defn- text-blob [proposal]
-  (str/lower-case (pr-str (select-keys proposal [:op :summary :rationale :cites :value]))))
+  (str/lower (pr-str (select-keys proposal [:op :summary :rationale :cites :value]))))
 
 (defn- scope-exclusion-violations [proposal]
   (let [op (:op proposal)
