@@ -97,9 +97,9 @@ Dispute intake auto-commits because recording that someone complained
 asserts nothing about who is right.
 
 ```bash
-clojure -M:dev:run   # a real quote, a refused guess, a human-accepted classification
-clojure -M:test      # 27 tests, 93 assertions
-clojure -M:lint
+kbb -M:dev:run   # a real quote, a refused guess, a human-accepted classification
+kbb -M:test      # 27 tests, 93 assertions
+kbb -M:lint
 ```
 
 ## Rollout phases
