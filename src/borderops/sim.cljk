@@ -1,7 +1,7 @@
 (ns borderops.sim
   "Offline demo: quote a landed cost, watch a missing rate refuse to
   guess, and watch an HS classification wait for a human.
-  `clojure -M:dev:run`."
+  `kbb -M:dev:run`."
   (:require [borderops.operation :as operation]
             [borderops.store :as store]
             [langgraph.graph :as g]))
