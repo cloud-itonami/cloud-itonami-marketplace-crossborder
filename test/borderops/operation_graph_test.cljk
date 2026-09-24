@@ -7,7 +7,7 @@
   `an-uncomputable-quote-never-reaches-a-human`."
   (:require [borderops.operation :as operation]
             [borderops.store :as store]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [langgraph.graph :as g]))
 
 (def ^:private op-context {:actor-id "border-01" :phase 3})
