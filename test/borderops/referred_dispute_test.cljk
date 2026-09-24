@@ -5,7 +5,7 @@
             [borderops.governor :as governor]
             [borderops.operation :as operation]
             [borderops.store :as store]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [langgraph.graph :as g]
             [marketplace.crossborder :as cb]
             [marketplace.support :as support]))

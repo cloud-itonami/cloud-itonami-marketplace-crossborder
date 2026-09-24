@@ -2,7 +2,7 @@
   (:require [borderops.advisor :as advisor]
             [borderops.governor :as governor]
             [borderops.store :as store]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [marketplace.crossborder :as cb]))
 
 (def ctx {:actor-id "border-actor" :phase 3})
